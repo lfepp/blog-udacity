@@ -21,6 +21,7 @@ import random
 import string
 import jinja2
 import webapp2
+import re
 from google.appengine.ext import db
 
 template_dir = os.path.join(os.path.dirname(__file__), "templates")
@@ -44,21 +45,21 @@ class Handler(webapp2.RequestHandler):
     def render(self, template, **kw):
         self.write(self.render_str(template, **kw))
 
-    def hash_str(s):
+    def hash_str(self, s):
         return hashlib.sha256("{0}{1}".format(s, secret_key)).hexdigest()
 
-    def make_salt():
+    def make_salt(self):
         return "".join(random.choice(string.letters) for x in xrange(10))
 
-    def make_pw_hash(self, email, pw, salt = None):
+    def make_pw_hash(self, email, pw, salt=None):
         if not salt:
             salt = self.make_salt()
         hash = self.hash_str("{0}{1}{2}".format(email, pw, salt))
         return "{0}|{1}".format(hash, salt)
 
-    def valid_pw(name, pw, hash):
+    def valid_pw(self, name, pw, hash):
         salt = hash.split("|")[1]
-        return hash == make_pw_hash(name, pw, salt)
+        return hash == self.make_pw_hash(name, pw, salt)
 
     def set_cookie(self, name, val, path, secure):
         if secure:
@@ -70,16 +71,16 @@ class Handler(webapp2.RequestHandler):
             "{0}={1}; Path={2}".format(name, cookie_val, path)
         )
 
-    def valid_cookie(self, name, cookie_val):
-        val = cookie_val.split("|")[1]
-        return cookie_val == "{0}|{1}".format(self.hash_str(val), val)
-
     def read_cookie(self, name, secure):
         cookie_val = self.request.cookies.get(name)
-        if secure:
+        if cookie_val and secure:
             return cookie_val.split("|")[1]
         else:
             return cookie_val
+
+    def valid_cookie(self, name, cookie_val):
+        val = cookie_val.split("|")[1]
+        return cookie_val == "{0}|{1}".format(self.hash_str(val), val)
 
 
 class Post(db.Model):
@@ -115,23 +116,42 @@ class SignUpPage(Handler):
     def post(self, error=None):
         email = self.request.get("email")
         password = self.request.get("password")
+        confirm = self.request.get("confirm-password")
         salt = self.make_salt()
 
-        if User.get_by_email(email):
-            self.render("signup.html", error="A user with that email already exists.")
+        if len(email) == 0 or len(password) == 0 or len(confirm) == 0:
+            error = "Missing one or more required fields."
+        elif password != confirm:
+            error = "Your passwords do not match."
+        elif not (re.match(
+                  r"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)",
+                  email)):
+            error = "You did not enter a valid email address."
+        elif User.get_by_email(email):
+            error = "A user with that email already exists."
         else:
             pw_hash = self.make_pw_hash(email, password, salt)
-            user = User(email=email, pw_hash=pw_hash, salt=salt)
-            user.put()
+            user = User(email=db.Email(email), pw_hash=pw_hash, salt=salt)
+            user_key = user.put()
+            uid = user_key.id()
+            self.set_cookie("user", str(uid), "/", True)
             self.redirect("/")
+        self.render("signup.html", error=error)
 
 
 class SignInPage(Handler):
     def get(self):
         self.render("signin.html")
 
+
+class SignOut(Handler):
+    def get(self):
+        self.set_cookie("user", "", "/", False)
+        self.redirect("/")
+
 app = webapp2.WSGIApplication([
-    ('/', MainPage),
-    ('/signup', SignUpPage),
-    ('/signin', SignInPage)
+    ("/", MainPage),
+    ("/signup", SignUpPage),
+    ("/signin", SignInPage),
+    ("/signout", SignOut)
 ], debug=True)
