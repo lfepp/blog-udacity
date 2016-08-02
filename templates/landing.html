@@ -1,26 +1,13 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Clear - An intuitive blog where you can just write</title>
-  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
-  <link rel="stylesheet" href="css/main.css">
-</head>
-<body>
-  <div class="container">
-    <header>
-      <h1 class="header-text text-center">Clear</h1>
-    </header>
-    <main class="container text-center">
-      <div class="jumbotron">
-        <p>Clear is an intuitive blog where you can focus on what's important: your writing. Whether you want to publish short stories, write poetry, or just dump your thoughts onto the page, Clear is there to help.</p>
-      </div>
-      <div class="btn-group">
-        <a href="/signup"><button type="button" class="btn btn-default btn-lg">Sign Up</button></a>
-        <a href="/signin"><button type="button" class="btn btn-primary btn-lg">Sign In</button></a>
-      </div>
-    </main>
+{% extends "base.html" %}
+{% block content %}
+<div class="container text-center">
+  <h1 class="header-text text-center">Clear</h1>
+  <div class="jumbotron">
+    <p>Clear is an intuitive blog where you can focus on what's important: your writing. Whether you want to publish short stories, write poetry, or just dump your thoughts onto the page, Clear is there to help.</p>
   </div>
-</body>
-</html>
+  <div class="btn-group">
+    <a href="/signup"><button type="button" class="btn btn-default btn-lg">Sign Up</button></a>
+    <a href="/signin"><button type="button" class="btn btn-primary btn-lg">Sign In</button></a>
+  </div>
+</div>
+{% endblock %}

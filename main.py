@@ -57,9 +57,9 @@ class Handler(webapp2.RequestHandler):
         hash = self.hash_str("{0}{1}{2}".format(email, pw, salt))
         return "{0}|{1}".format(hash, salt)
 
-    def valid_pw(self, name, pw, hash):
+    def valid_pw(self, email, pw, hash):
         salt = hash.split("|")[1]
-        return hash == self.make_pw_hash(name, pw, salt)
+        return hash == self.make_pw_hash(email, pw, salt)
 
     def set_cookie(self, name, val, path, secure):
         if secure:
@@ -85,13 +85,14 @@ class Handler(webapp2.RequestHandler):
 
 class Post(db.Model):
     title = db.StringProperty(required=True)
-    body = db.TextProperty(required=True)
+    content = db.TextProperty(required=True)
     author = db.StringProperty(required=True)
     created_time = db.DateTimeProperty(auto_now_add=True)
 
 
 class User(db.Model):
     email = db.EmailProperty(required=True)
+    name = db.StringProperty(required=True)
     pw_hash = db.StringProperty(required=True)
     salt = db.StringProperty(required=True)
 
@@ -102,9 +103,13 @@ class User(db.Model):
 
 class MainPage(Handler):
     def get(self):
-        user = self.read_cookie("user", True)
-        if user:
-            self.render("index.html", user=user)
+        uid = self.read_cookie("user", True)
+        if uid:
+            user = User.get_by_id(int(uid))
+            posts = db.GqlQuery(
+                "SELECT * FROM Post ORDER BY created_time DESC"
+            )
+            self.render("index.html", user=user, posts=posts)
         else:
             self.render("landing.html")
 
@@ -115,6 +120,7 @@ class SignUpPage(Handler):
 
     def post(self, error=None):
         email = self.request.get("email")
+        name = self.request.get("name")
         password = self.request.get("password")
         confirm = self.request.get("confirm-password")
         salt = self.make_salt()
@@ -131,7 +137,9 @@ class SignUpPage(Handler):
             error = "A user with that email already exists."
         else:
             pw_hash = self.make_pw_hash(email, password, salt)
-            user = User(email=db.Email(email), pw_hash=pw_hash, salt=salt)
+            user = User(
+                email=db.Email(email), name=name, pw_hash=pw_hash, salt=salt
+            )
             user_key = user.put()
             uid = user_key.id()
             self.set_cookie("user", str(uid), "/", True)
@@ -143,15 +151,83 @@ class SignInPage(Handler):
     def get(self):
         self.render("signin.html")
 
+    def post(self, error=None):
+        email = self.request.get("email")
+        password = self.request.get("password")
+
+        if len(email) == 0 or len(password) == 0:
+            error = "Missing one or more required fields."
+        user = User.get_by_email(email)
+        if not user:
+            error = "Found no user with email {0}.".format(email)
+        elif self.valid_pw(email, password, user.pw_hash):
+            uid = user.key().id()
+            self.set_cookie("user", str(uid), "/", True)
+            self.redirect("/")
+        else:
+            error = "Username and password do not match."
+        self.render("signin.html", error=error)
+
 
 class SignOut(Handler):
     def get(self):
         self.set_cookie("user", "", "/", False)
         self.redirect("/")
 
+
+class ProfilePage(Handler):
+    def get(self):
+        uid = self.read_cookie("user", True)
+        user = User.get_by_id(int(uid))
+        posts = db.GqlQuery(
+            ("SELECT * FROM Post WHERE REPLACE(author, \" \", \"\") = \
+            REPLACE(\"{0}\", \" \", \"\") ORDER BY created_time DESC"
+                .format(user.name))
+        )
+        self.render("profile.html", user=user, posts=posts)
+
+
+class PostPage(Handler):
+    def get(self, pid=None):
+        if pid:
+            post = Post.get_by_id(pid)
+            self.render("edit-post.html", post=post)
+        else:
+            self.render("edit-post.html")
+
+    def post(self, pid=None):
+        title = self.request.get("title")
+        content = self.request.get("content")
+
+        if pid:
+            post = Post.get_by_id(pid)
+            post.title = title
+            post.content = content
+            post.put()
+            self.redirect("/post/{0}".format(pid))
+        else:
+            uid = self.read_cookie("user", True)
+            user = User.get_by_id(int(uid))
+            post = Post(title=title, content=content, author=user.name)
+            pid = post.key().id()
+            self.redirect("/post/{0}".format(pid))
+
+
+class ViewPostPage(Handler):
+    def get(self, pid):
+        post = Post.get_by_id(pid)
+        uid = self.read_cookie("user", True)
+        user = User.get_by_id(int(uid))
+        self.render("view-post.html", post=post, user=user)
+
+
 app = webapp2.WSGIApplication([
     ("/", MainPage),
     ("/signup", SignUpPage),
     ("/signin", SignInPage),
-    ("/signout", SignOut)
+    ("/signout", SignOut),
+    ("/profile", ProfilePage),
+    ("/post", PostPage),
+    ("/post/(.*)/edit", PostPage),
+    ("/post/(.*)", ViewPostPage)
 ], debug=True)
