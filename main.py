@@ -37,7 +37,11 @@ class Handler(webapp2.RequestHandler):
 
 class MainPage(Handler):
     def get(self):
-        self.render("index.html")
+        user = self.request.cookies.get("user", None)
+        if user:
+            self.render("index.html", user=user)
+        else:
+            self.render("landing.html")
 
 app = webapp2.WSGIApplication([
     ('/', MainPage)
