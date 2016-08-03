@@ -186,7 +186,7 @@ class ProfilePage(Handler):
         self.render("profile.html", user=user, posts=posts)
 
 
-class PostPage(Handler):
+class EditPostPage(Handler):
     def get(self, pid=None):
         if pid:
             post = Post.get_by_id(int(pid))
@@ -227,7 +227,7 @@ app = webapp2.WSGIApplication([
     ("/signin", SignInPage),
     ("/signout", SignOut),
     ("/profile", ProfilePage),
-    ("/post", PostPage),
-    ("/post/(.*)/edit", PostPage),
+    ("/post", EditPostPage),
+    ("/post/(.*)/edit", EditPostPage),
     ("/post/(.*)", ViewPostPage)
 ], debug=True)
