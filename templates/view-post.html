@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% block content%}
-<h1 class="header-text text-center">{{ post.title }}<small>by {{ post.author }}</small></h1>
+<h1 class="header-text text-center">{{ post.title }}<small> by {{ post.author }}</small></h1>
 {% if user.name == post.author %}
-  <a href="/post/{{ post.key().id() }}/edit" type="btn btn-primary" role="button">Edit Post</a>
+  <a href="/post/{{ post.key().id() }}/edit" class="btn btn-primary center-block" role="button">Edit Post</a>
+  <br>
 {% endif %}
 <div class="jumbotron text-center">
   <p>{{ post.content }}</p>
