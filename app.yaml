@@ -1,5 +1,5 @@
 application: blog-udacity-luke
-version: beta-001
+version: beta-004
 runtime: python27
 api_version: 1
 threadsafe: false
@@ -8,9 +8,6 @@ handlers:
 - url: /favicon\.ico
   static_files: favicon.ico
   upload: favicon\.ico
-
-- url: /css
-  static_dir: css
 
 - url: /img
   static_dir: img
@@ -22,4 +19,4 @@ libraries:
 - name: webapp2
   version: "2.5.2"
 - name: jinja2
-  version: latest
+  version: "2.6"
