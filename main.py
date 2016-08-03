@@ -180,9 +180,8 @@ class ProfilePage(Handler):
         uid = self.read_cookie("user", True)
         user = User.get_by_id(int(uid))
         posts = db.GqlQuery(
-            ("SELECT * FROM Post WHERE REPLACE(author, \" \", \"\") = \
-            REPLACE(\"{0}\", \" \", \"\") ORDER BY created_time DESC"
-                .format(user.name))
+            ("SELECT * FROM Post WHERE author = '{0}' ORDER BY created_time \
+            DESC".format(user.name))
         )
         self.render("profile.html", user=user, posts=posts)
 
@@ -190,7 +189,7 @@ class ProfilePage(Handler):
 class PostPage(Handler):
     def get(self, pid=None):
         if pid:
-            post = Post.get_by_id(pid)
+            post = Post.get_by_id(int(pid))
             self.render("edit-post.html", post=post)
         else:
             self.render("edit-post.html")
@@ -200,7 +199,7 @@ class PostPage(Handler):
         content = self.request.get("content")
 
         if pid:
-            post = Post.get_by_id(pid)
+            post = Post.get_by_id(int(pid))
             post.title = title
             post.content = content
             post.put()
@@ -209,13 +208,14 @@ class PostPage(Handler):
             uid = self.read_cookie("user", True)
             user = User.get_by_id(int(uid))
             post = Post(title=title, content=content, author=user.name)
-            pid = post.key().id()
+            post_key = post.put()
+            pid = post_key.id()
             self.redirect("/post/{0}".format(pid))
 
 
 class ViewPostPage(Handler):
     def get(self, pid):
-        post = Post.get_by_id(pid)
+        post = Post.get_by_id(int(pid))
         uid = self.read_cookie("user", True)
         user = User.get_by_id(int(uid))
         self.render("view-post.html", post=post, user=user)
