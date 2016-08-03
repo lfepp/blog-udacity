@@ -18,7 +18,7 @@ An intuitive blog where you can just write
     localhost:8080
     ```
 
-1. The app is also available online at <blog-udacity-luke.appspot.com>
+1. The app is also available online at (blog-udacity-luke.appspot.com)
 
 ## Author
 
