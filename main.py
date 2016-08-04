@@ -104,6 +104,7 @@ class Post(db.Model):
     content = db.TextProperty(required=True)
     author = db.StringProperty(required=True)
     created_time = db.DateTimeProperty(auto_now_add=True)
+    likes = db.IntegerProperty(default=0)
 
 
 class User(db.Model):
@@ -113,6 +114,7 @@ class User(db.Model):
     name = db.StringProperty(required=True)
     pw_hash = db.StringProperty(required=True)
     salt = db.StringProperty(required=True)
+    liked_posts = db.ListProperty(int, default=None)
 
     @classmethod
     def get_by_email(cls, email):
@@ -261,6 +263,24 @@ class ViewPostPage(Handler):
         uid = self.read_cookie("user", True)
         user = User.get_by_id(int(uid))
         self.render("view-post.html", post=post, user=user)
+
+    def post(self, pid):
+        post = Post.get_by_id(int(pid))
+        # Check if user has liked this post already
+        liked = False
+        uid = self.read_cookie("user", True)
+        user = User.get_by_id(int(uid))
+        for like in user.liked_posts:
+            if like == int(pid):
+                liked = True
+                self.render("view-post.html", post=post, user=user,
+                            error="You cannot like the same post twice")
+        if not liked:
+            post.likes += 1
+            post.put()
+            user.liked_posts.append(int(pid))
+            user.put()
+            self.render("view-post.html", post=post, user=user)
 
 
 class DeletePostPage(Handler):

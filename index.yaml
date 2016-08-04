@@ -15,3 +15,8 @@ indexes:
   - name: author
   - name: created_time
     direction: desc
+
+- kind: User
+  properties:
+  - name: id
+  - name: liked_posts
