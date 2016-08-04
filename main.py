@@ -255,9 +255,21 @@ class ViewPostPage(Handler):
 
     def get(self, pid):
         post = Post.get_by_id(int(pid))
+        # Check if post exists in case of slow deletion
+        if not post:
+            self.redirect("/")
         uid = self.read_cookie("user", True)
         user = User.get_by_id(int(uid))
         self.render("view-post.html", post=post, user=user)
+
+
+class DeletePostPage(Handler):
+    """Handler for deleting a post"""
+
+    def get(self, pid):
+        post = Post.get_by_id(int(pid))
+        post.delete()
+        self.redirect("/")
 
 
 app = webapp2.WSGIApplication([
@@ -268,5 +280,6 @@ app = webapp2.WSGIApplication([
     ("/profile", ProfilePage),
     ("/post", EditPostPage),
     ("/post/(.*)/edit", EditPostPage),
+    ("/post/(.*)/delete", DeletePostPage),
     ("/post/(.*)", ViewPostPage)
 ], debug=True)
