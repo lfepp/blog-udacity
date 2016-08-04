@@ -35,6 +35,8 @@ secret_key = config["secret"]
 
 
 class Handler(webapp2.RequestHandler):
+    """Handler for all web requests"""
+
     def write(self, *a, **kw):
         self.response.out.write(*a, **kw)
 
@@ -46,22 +48,30 @@ class Handler(webapp2.RequestHandler):
         self.write(self.render_str(template, **kw))
 
     def hash_str(self, s):
+        """Hashes a string concatenated with secret in config.json"""
+
         return hashlib.sha256("{0}{1}".format(s, secret_key)).hexdigest()
 
     def make_salt(self):
         return "".join(random.choice(string.letters) for x in xrange(10))
 
     def make_pw_hash(self, email, pw, salt=None):
+        """Create a hashed password from email, password, and salt"""
+
         if not salt:
             salt = self.make_salt()
         hash = self.hash_str("{0}{1}{2}".format(email, pw, salt))
         return "{0}|{1}".format(hash, salt)
 
     def valid_pw(self, email, pw, hash):
+        """Verify a password is valid"""
+
         salt = hash.split("|")[1]
         return hash == self.make_pw_hash(email, pw, salt)
 
     def set_cookie(self, name, val, path, secure):
+        """Set both secure and insecure cookies"""
+
         if secure:
             cookie_val = "{0}|{1}".format(self.hash_str(val), val)
         else:
@@ -72,6 +82,8 @@ class Handler(webapp2.RequestHandler):
         )
 
     def read_cookie(self, name, secure):
+        """Read both secure and insecure cookies"""
+
         cookie_val = self.request.cookies.get(name)
         if cookie_val and secure:
             return cookie_val.split("|")[1]
@@ -79,11 +91,15 @@ class Handler(webapp2.RequestHandler):
             return cookie_val
 
     def valid_cookie(self, name, cookie_val):
+        """Verify a secure cookie is valid"""
+
         val = cookie_val.split("|")[1]
         return cookie_val == "{0}|{1}".format(self.hash_str(val), val)
 
 
 class Post(db.Model):
+    """Database model for posts"""
+
     title = db.StringProperty(required=True)
     content = db.TextProperty(required=True)
     author = db.StringProperty(required=True)
@@ -91,6 +107,8 @@ class Post(db.Model):
 
 
 class User(db.Model):
+    """Database model for users"""
+
     email = db.EmailProperty(required=True)
     name = db.StringProperty(required=True)
     pw_hash = db.StringProperty(required=True)
@@ -102,6 +120,8 @@ class User(db.Model):
 
 
 class MainPage(Handler):
+    """Handler for the landing and front pages"""
+
     def get(self):
         uid = self.read_cookie("user", True)
         if uid:
@@ -115,6 +135,8 @@ class MainPage(Handler):
 
 
 class SignUpPage(Handler):
+    """Handler for the sign up page"""
+
     def get(self):
         self.render("signup.html", error=None)
 
@@ -125,16 +147,21 @@ class SignUpPage(Handler):
         confirm = self.request.get("confirm-password")
         salt = self.make_salt()
 
+        # Ensure all required fields have been submitted
         if len(email) == 0 or len(password) == 0 or len(confirm) == 0:
             error = "Missing one or more required fields."
+        # Ensure the password and confirm password fields match
         elif password != confirm:
             error = "Your passwords do not match."
+        # Ensure the email is in a valid email format
         elif not (re.match(
                   r"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)",
                   email)):
             error = "You did not enter a valid email address."
+        # Ensure the email does not match a current user
         elif User.get_by_email(email):
             error = "A user with that email already exists."
+        # Register the new user
         else:
             pw_hash = self.make_pw_hash(email, password, salt)
             user = User(
@@ -148,6 +175,8 @@ class SignUpPage(Handler):
 
 
 class SignInPage(Handler):
+    """Handler for the sign in page"""
+
     def get(self):
         self.render("signin.html")
 
@@ -170,12 +199,16 @@ class SignInPage(Handler):
 
 
 class SignOut(Handler):
+    """Handler to clear user cookie on logout"""
+
     def get(self):
         self.set_cookie("user", "", "/", False)
         self.redirect("/")
 
 
 class ProfilePage(Handler):
+    """Handler for the profile page"""
+
     def get(self):
         uid = self.read_cookie("user", True)
         user = User.get_by_id(int(uid))
@@ -187,10 +220,14 @@ class ProfilePage(Handler):
 
 
 class EditPostPage(Handler):
+    """Handler for the edit post and new post pages"""
+
     def get(self, pid=None):
+        # If this is a current post, edit the current post
         if pid:
             post = Post.get_by_id(int(pid))
             self.render("edit-post.html", post=post)
+        # Otherwise create a new post
         else:
             self.render("edit-post.html")
 
@@ -214,6 +251,8 @@ class EditPostPage(Handler):
 
 
 class ViewPostPage(Handler):
+    """Handler for the post pages"""
+
     def get(self, pid):
         post = Post.get_by_id(int(pid))
         uid = self.read_cookie("user", True)

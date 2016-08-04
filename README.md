@@ -12,6 +12,14 @@ An intuitive blog where you can just write
 
 1. Add the repository as an application in your Google App Engine Launcher
 
+1. Create a file called `config.json` in your project's root directory with the following format:
+
+    ```
+    {
+      "secret": "ENTER_A_SECRET_KEY_HERE"
+    }
+    ```
+
 1. Click on run to run the website locally and access the page at:
 
     ```
