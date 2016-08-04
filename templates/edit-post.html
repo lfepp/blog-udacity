@@ -4,7 +4,7 @@
   <div class="form-group">
     <label for="title">Title</label>
     {% if post %}
-      <input type="text" class="form-control" id="title" placeholder="{{ post.title }}" name="title">
+      <input type="text" class="form-control" id="title" name="title" value="{{ post.title }}">
     {% else %}
       <input type="text" class="form-control" id="title" placeholder="My Blog Post" name="title">
     {% endif %}
@@ -12,7 +12,7 @@
   <div class="form-group">
     <label for="content">Content</label>
     {% if post %}
-      <textarea class="form-control" name="content" id="content" rows="5" placeholder="{{ post.content }}"></textarea>
+      <textarea class="form-control" name="content" id="content" rows="5">{{ post.content }}</textarea>
     {% else %}
       <textarea class="form-control" name="content" id="content" rows="5"></textarea>
     {% endif %}

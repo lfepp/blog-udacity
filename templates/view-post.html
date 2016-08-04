@@ -1,12 +1,14 @@
 {% extends "base.html" %}
 {% block content%}
-<h1 class="header-text text-center">{{ post.title }}<small> by {{ post.author }}</small></h1>
 {% if user.name == post.author %}
-  <div class="btn-group text-center">
+<div class="text-right">
+  <div class="btn-group">
     <a href="/post/{{ post.key().id() }}/edit" class="btn btn-primary" role="button">Edit Post</a>
     <a href="/post/{{ post.key().id() }}/delete" class="btn btn-danger" role="button">Delete Post</a>
   </div>
+</div>
 {% endif %}
+<h1 class="header-text text-center">{{ post.title }}<small> by {{ post.author }}</small></h1>
 <div class="jumbotron text-center">
   <p>{{ post.content }}</p>
 </div>
