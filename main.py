@@ -96,6 +96,19 @@ class Handler(webapp2.RequestHandler):
         val = cookie_val.split("|")[1]
         return cookie_val == "{0}|{1}".format(self.hash_str(val), val)
 
+    def user_post(self, uid, pid):
+        """Verify a post was created by a particular user"""
+
+        user = User.get_by_id(int(uid))
+        user_posts = db.GqlQuery(
+            ("SELECT * FROM Post WHERE author = '{0}' ORDER BY created_time \
+            DESC".format(user.name))
+        )
+        for user_post in user_posts:
+            if user_post.key().id() == int(pid):
+                return True
+        return False
+
 
 class Post(db.Model):
     """Database model for posts"""
@@ -227,8 +240,16 @@ class EditPostPage(Handler):
     def get(self, pid=None):
         # If this is a current post, edit the current post
         if pid:
-            post = Post.get_by_id(int(pid))
-            self.render("edit-post.html", post=post)
+            # Check that user created this post
+            uid = self.read_cookie("user", True)
+            if self.user_post(uid, pid):
+                post = Post.get_by_id(int(pid))
+                self.render("edit-post.html", post=post)
+            else:
+                user = User.get_by_id(int(uid))
+                post = Post.get_by_id(int(pid))
+                self.render("view-post.html", post=post, user=user,
+                            error="You cannot edit a post you did not create")
         # Otherwise create a new post
         else:
             self.render("edit-post.html")
@@ -266,7 +287,7 @@ class ViewPostPage(Handler):
 
     def post(self, pid):
         post = Post.get_by_id(int(pid))
-        # Check if user has liked this post already
+        # Check if user has already liked this post
         liked = False
         uid = self.read_cookie("user", True)
         user = User.get_by_id(int(uid))
@@ -287,9 +308,17 @@ class DeletePostPage(Handler):
     """Handler for deleting a post"""
 
     def get(self, pid):
-        post = Post.get_by_id(int(pid))
-        post.delete()
-        self.redirect("/")
+        # Check that user created post
+        uid = self.read_cookie("user", True)
+        if self.user_post(uid, pid):
+            post = Post.get_by_id(int(pid))
+            post.delete()
+            self.redirect("/")
+        else:
+            user = User.get_by_id(int(uid))
+            post = Post.get_by_id(int(pid))
+            self.render("view-post.html", post=post, user=user,
+                        error="You cannot delete a post you did not create")
 
 
 app = webapp2.WSGIApplication([
