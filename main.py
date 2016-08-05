@@ -292,10 +292,15 @@ class EditPostPage(Handler):
             uid = self.read_cookie("user", True)
             post = Post.get_by_id(int(pid))
             if self.user_post(uid, pid):
-                post.title = title
-                post.content = content
-                post.put()
-                self.redirect("/post/{0}".format(pid))
+                # Check to ensure title and content are not blank
+                if len(title) == 0 or len(content) == 0:
+                    self.render("edit-post.html", post=post,
+                                error="Missing one or more required fields")
+                else:
+                    post.title = title
+                    post.content = content
+                    post.put()
+                    self.redirect("/post/{0}".format(pid))
             else:
                 user = User.get_by_id(int(uid))
                 comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
@@ -304,12 +309,17 @@ class EditPostPage(Handler):
                             comments=comments,
                             error="You cannot edit a post you did not create")
         else:
-            uid = self.read_cookie("user", True)
-            user = User.get_by_id(int(uid))
-            post = Post(title=title, content=content, author=user.name)
-            post_key = post.put()
-            pid = post_key.id()
-            self.redirect("/post/{0}".format(pid))
+            # Check to ensure title and content are not blank
+            if len(title) == 0 or len(content) == 0:
+                self.render("edit-post.html",
+                            error="Missing one or more required fields")
+            else:
+                uid = self.read_cookie("user", True)
+                user = User.get_by_id(int(uid))
+                post = Post(title=title, content=content, author=user.name)
+                post_key = post.put()
+                pid = post_key.id()
+                self.redirect("/post/{0}".format(pid))
 
 
 class ViewPostPage(Handler):
@@ -386,14 +396,21 @@ class CreateCommentPage(Handler):
     def post(self, pid):
         content = self.request.get("content")
 
-        uid = self.read_cookie("user", True)
-        user = User.get_by_id(int(uid))
         post = Post.get_by_id(int(pid))
-        comment = Comment(content=content, author=user.name, post_id=int(pid))
-        comment.put()
-        comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
-            {0}".format(pid))
-        self.render("view-post.html", post=post, user=user, comments=comments)
+        # Check that content is not blank
+        if len(content) == 0:
+            self.render("create-comment.html", post=post,
+                        error="Your comment must include content")
+        else:
+            uid = self.read_cookie("user", True)
+            user = User.get_by_id(int(uid))
+            comment = Comment(content=content, author=user.name,
+                              post_id=int(pid))
+            comment.put()
+            comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
+                {0}".format(pid))
+            self.render("view-post.html", post=post, user=user,
+                        comments=comments)
 
 
 class EditCommentPage(Handler):
@@ -421,10 +438,15 @@ class EditCommentPage(Handler):
         uid = self.read_cookie("user", True)
         user = User.get_by_id(int(uid))
         if self.user_comment(uid, cid):
-            comment.content = content
-            comment.put()
-            self.render("view-comment.html", post=post, user=user,
-                        comment=comment)
+            # Check that content is not blank
+            if len(content) == 0:
+                self.render("edit-comment.html", post=post, comment=comment,
+                            error="Your comment must include content")
+            else:
+                comment.content = content
+                comment.put()
+                self.render("view-comment.html", post=post, user=user,
+                            comment=comment)
         else:
             self.render("view-comment.html", post=post, user=user,
                         comment=comment,
