@@ -25,4 +25,14 @@
 <div class="jumbotron text-center">
   <p>{{ post.content }}</p>
 </div>
+<h2 class="header-text text-center">Comments</h2>
+<div class="text-center">
+  <a href="/post/{{ post.key().id() }}/comment" class="btn btn-primary" role="button">Add Comment</a>
+</div>
+{% for comment in comments %}
+<div class="panel-heading">
+  <h3 class="panel-title"><a href="/post/{{ post.key().id() }}/comment/{{ comment.key().id() }}">{{ comment.author }}</a></h3>
+</div>
+<div class="panel-body">{{ comment.content }}</div>
+{% endfor %}
 {% endblock %}

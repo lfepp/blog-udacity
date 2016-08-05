@@ -101,11 +101,22 @@ class Handler(webapp2.RequestHandler):
 
         user = User.get_by_id(int(uid))
         user_posts = db.GqlQuery(
-            ("SELECT * FROM Post WHERE author = '{0}' ORDER BY created_time \
-            DESC".format(user.name))
+            "SELECT * FROM Post WHERE author = '{0}'".format(user.name)
         )
         for user_post in user_posts:
             if user_post.key().id() == int(pid):
+                return True
+        return False
+
+    def user_comment(self, uid, cid):
+        """Verify a comment was created by a particular user"""
+
+        user = User.get_by_id(int(uid))
+        user_comments = db.GqlQuery(
+            "SELECT * FROM Comment WHERE author = '{0}'".format(user.name)
+        )
+        for user_comment in user_comments:
+            if user_comment.key().id() == int(cid):
                 return True
         return False
 
@@ -118,6 +129,15 @@ class Post(db.Model):
     author = db.StringProperty(required=True)
     created_time = db.DateTimeProperty(auto_now_add=True)
     likes = db.IntegerProperty(default=0)
+
+
+class Comment(db.Model):
+    """Database model for comments"""
+
+    content = db.TextProperty(required=True)
+    author = db.StringProperty(required=True)
+    created_time = db.DateTimeProperty(auto_now_add=True)
+    post_id = db.IntegerProperty(required=True)
 
 
 class User(db.Model):
@@ -180,7 +200,10 @@ class SignUpPage(Handler):
         else:
             pw_hash = self.make_pw_hash(email, password, salt)
             user = User(
-                email=db.Email(email), name=name, pw_hash=pw_hash, salt=salt
+                email=db.Email(email),
+                name=name,
+                pw_hash=pw_hash,
+                salt=salt
             )
             user_key = user.put()
             uid = user_key.id()
@@ -228,10 +251,14 @@ class ProfilePage(Handler):
         uid = self.read_cookie("user", True)
         user = User.get_by_id(int(uid))
         posts = db.GqlQuery(
-            ("SELECT * FROM Post WHERE author = '{0}' ORDER BY created_time \
-            DESC".format(user.name))
+            "SELECT * FROM Post WHERE author = '{0}' ORDER BY created_time \
+            DESC".format(user.name)
         )
-        self.render("profile.html", user=user, posts=posts)
+        comments = db.GqlQuery(
+            "SELECT * FROM Comment WHERE author = '{0}' ORDER BY created_time \
+            DESC".format(user.name)
+        )
+        self.render("profile.html", user=user, posts=posts, comments=comments)
 
 
 class EditPostPage(Handler):
@@ -242,13 +269,15 @@ class EditPostPage(Handler):
         if pid:
             # Check that user created this post
             uid = self.read_cookie("user", True)
+            post = Post.get_by_id(int(pid))
             if self.user_post(uid, pid):
-                post = Post.get_by_id(int(pid))
                 self.render("edit-post.html", post=post)
             else:
                 user = User.get_by_id(int(uid))
-                post = Post.get_by_id(int(pid))
+                comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
+                    {0}".format(pid))
                 self.render("view-post.html", post=post, user=user,
+                            comments=comments,
                             error="You cannot edit a post you did not create")
         # Otherwise create a new post
         else:
@@ -283,7 +312,9 @@ class ViewPostPage(Handler):
             self.redirect("/")
         uid = self.read_cookie("user", True)
         user = User.get_by_id(int(uid))
-        self.render("view-post.html", post=post, user=user)
+        comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
+            {0}".format(pid))
+        self.render("view-post.html", post=post, user=user, comments=comments)
 
     def post(self, pid):
         post = Post.get_by_id(int(pid))
@@ -291,17 +322,21 @@ class ViewPostPage(Handler):
         liked = False
         uid = self.read_cookie("user", True)
         user = User.get_by_id(int(uid))
+        comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
+            {0}".format(pid))
         for like in user.liked_posts:
             if like == int(pid):
                 liked = True
                 self.render("view-post.html", post=post, user=user,
+                            comments=comments,
                             error="You cannot like the same post twice")
         if not liked:
             post.likes += 1
             post.put()
             user.liked_posts.append(int(pid))
             user.put()
-            self.render("view-post.html", post=post, user=user)
+            self.render("view-post.html", post=post, user=user,
+                        comments=comments)
 
 
 class DeletePostPage(Handler):
@@ -317,9 +352,92 @@ class DeletePostPage(Handler):
         else:
             user = User.get_by_id(int(uid))
             post = Post.get_by_id(int(pid))
+            comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
+                {0}".format(pid))
             self.render("view-post.html", post=post, user=user,
+                        comments=comments,
                         error="You cannot delete a post you did not create")
 
+
+class CreateCommentPage(Handler):
+    """Handler for commenting on a post"""
+
+    def get(self, pid):
+        post = Post.get_by_id(int(pid))
+        self.render("create-comment.html", post=post)
+
+    def post(self, pid):
+        content = self.request.get("content")
+
+        uid = self.read_cookie("user", True)
+        user = User.get_by_id(int(uid))
+        post = Post.get_by_id(int(pid))
+        comment = Comment(content=content, author=user.name, post_id=int(pid))
+        comment.put()
+        comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
+            {0}".format(pid))
+        self.render("view-post.html", post=post, user=user, comments=comments)
+
+
+class EditCommentPage(Handler):
+    """Handler for editing a comment"""
+
+    def get(self, pid, cid):
+        post = Post.get_by_id(int(pid))
+        comment = Comment.get_by_id(int(cid))
+        # Check that this comment was created by user
+        uid = self.read_cookie("user", True)
+        if self.user_comment(uid, cid):
+            self.render("edit-comment.html", post=post, comment=comment)
+        else:
+            user = User.get_by_id(int(uid))
+            self.render("view-comment.html", post=post, user=user,
+                        comment=comment,
+                        error="You cannot edit a post you did not create")
+
+    def post(self, pid, cid):
+        content = self.request.get("content")
+
+        post = Post.get_by_id(int(pid))
+        comment = Comment.get_by_id(int(cid))
+        comment.content = content
+        comment.put()
+        uid = self.read_cookie("user", True)
+        user = User.get_by_id(int(uid))
+        self.render("view-comment.html", post=post, user=user, comment=comment)
+
+
+class ViewCommentPage(Handler):
+    """Handler for viewing a comment"""
+
+    def get(self, pid, cid):
+        comment = Comment.get_by_id(int(cid))
+        # Check if comment exists in case of slow deletion
+        if not comment:
+            self.redirect("/post/{0}".format(pid))
+        post = Post.get_by_id(int(pid))
+        uid = self.read_cookie("user", True)
+        user = User.get_by_id(int(uid))
+        self.render("view-comment.html", post=post, user=user, comment=comment)
+
+
+class DeleteCommentPage(Handler):
+    """Handler for deleting a comment"""
+
+    def get(self, pid, cid):
+        # Check that user created comment
+        uid = self.read_cookie("user", True)
+        if self.user_comment(uid, cid):
+            comment = Comment.get_by_id(int(cid))
+            comment.delete()
+            self.redirect("/post/{0}".format(pid))
+        else:
+            user = User.get_by_id(int(uid))
+            post = Post.get_by_id(int(pid))
+            comment = Comment.get_by_id(int(cid))
+            self.render("view-comment.html", post=post, user=user,
+                        comment=comment,
+                        error="You cannot delete a comment you did not create")
 
 app = webapp2.WSGIApplication([
     ("/", MainPage),
@@ -328,7 +446,11 @@ app = webapp2.WSGIApplication([
     ("/signout", SignOut),
     ("/profile", ProfilePage),
     ("/post", EditPostPage),
+    ("/post/(.*)/comment/(.*)/edit", EditCommentPage),
+    ("/post/(.*)/comment/(.*)/delete", DeleteCommentPage),
     ("/post/(.*)/edit", EditPostPage),
     ("/post/(.*)/delete", DeletePostPage),
+    ("/post/(.*)/comment", CreateCommentPage),
+    ("/post/(.*)/comment/(.*)", ViewCommentPage),
     ("/post/(.*)", ViewPostPage)
 ], debug=True)

@@ -24,5 +24,9 @@
     </div>
     <div class="panel-body">{{ post.content }}</div>
   {% endfor %}
+  <h2 class="text-center">Your Comments</h2>
+  {% for comment in comments %}
+    <div class="panel-body">{{ comment.content }}</div>
+  {% endfor %}
 </div>
 {% endblock %}
