@@ -318,19 +318,26 @@ class ViewPostPage(Handler):
 
     def post(self, pid):
         post = Post.get_by_id(int(pid))
-        # Check if user has already liked this post
-        liked = False
+        # Check if this is the user's post
+        own = False
         uid = self.read_cookie("user", True)
         user = User.get_by_id(int(uid))
         comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
             {0}".format(pid))
+        if self.user_post(uid, pid):
+            own = True
+            self.render("view-post.html", post=post, user=user,
+                        comments=comments,
+                        error="You cannot like your own post")
+        # Check if user has already liked this post
+        liked = False
         for like in user.liked_posts:
             if like == int(pid):
                 liked = True
                 self.render("view-post.html", post=post, user=user,
                             comments=comments,
                             error="You cannot like the same post twice")
-        if not liked:
+        if not liked and not own:
             post.likes += 1
             post.put()
             user.liked_posts.append(int(pid))
