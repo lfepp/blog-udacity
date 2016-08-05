@@ -1,5 +1,5 @@
 application: blog-udacity-luke
-version: beta-006
+version: beta-007
 runtime: python27
 api_version: 1
 threadsafe: false
