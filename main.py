@@ -288,11 +288,21 @@ class EditPostPage(Handler):
         content = self.request.get("content")
 
         if pid:
+            # Check that user created this post
+            uid = self.read_cookie("user", True)
             post = Post.get_by_id(int(pid))
-            post.title = title
-            post.content = content
-            post.put()
-            self.redirect("/post/{0}".format(pid))
+            if self.user_post(uid, pid):
+                post.title = title
+                post.content = content
+                post.put()
+                self.redirect("/post/{0}".format(pid))
+            else:
+                user = User.get_by_id(int(uid))
+                comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
+                         {0}".format(pid))
+                self.render("view-post.html", post=post, user=user,
+                            comments=comments,
+                            error="You cannot edit a post you did not create")
         else:
             uid = self.read_cookie("user", True)
             user = User.get_by_id(int(uid))
@@ -407,11 +417,18 @@ class EditCommentPage(Handler):
 
         post = Post.get_by_id(int(pid))
         comment = Comment.get_by_id(int(cid))
-        comment.content = content
-        comment.put()
+        # Check that user created this comment
         uid = self.read_cookie("user", True)
         user = User.get_by_id(int(uid))
-        self.render("view-comment.html", post=post, user=user, comment=comment)
+        if self.user_comment(uid, cid):
+            comment.content = content
+            comment.put()
+            self.render("view-comment.html", post=post, user=user,
+                        comment=comment)
+        else:
+            self.render("view-comment.html", post=post, user=user,
+                        comment=comment,
+                        error="You cannot edit a post you did not create")
 
 
 class ViewCommentPage(Handler):
