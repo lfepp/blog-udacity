@@ -90,7 +90,7 @@ class Handler(webapp2.RequestHandler):
         else:
             return cookie_val
 
-    def valid_cookie(self, name, cookie_val):
+    def valid_cookie(self, cookie_val):
         """Verify a secure cookie is valid"""
 
         val = cookie_val.split("|")[1]
@@ -119,6 +119,19 @@ class Handler(webapp2.RequestHandler):
             if user_comment.key().id() == int(cid):
                 return True
         return False
+
+    def valid_user(self):
+        """Verify that the current user is logged in as a valid user"""
+
+        user_cookie = self.request.cookies.get("user")
+        if not user_cookie:
+            return False
+        if not self.valid_cookie(user_cookie):
+            return False
+        uid = self.read_cookie("user", True)
+        if len(uid) == 0:
+            return False
+        return True
 
 
 class Post(db.Model):
@@ -160,11 +173,16 @@ class MainPage(Handler):
     def get(self):
         uid = self.read_cookie("user", True)
         if uid:
-            user = User.get_by_id(int(uid))
-            posts = db.GqlQuery(
-                "SELECT * FROM Post ORDER BY created_time DESC"
-            )
-            self.render("index.html", user=user, posts=posts)
+            # Check that user is valid
+            if not self.valid_user():
+                self.set_cookie("user", "", "/", False)
+                self.redirect("/")
+            else:
+                user = User.get_by_id(int(uid))
+                posts = db.GqlQuery(
+                    "SELECT * FROM Post ORDER BY created_time DESC"
+                )
+                self.render("index.html", user=user, posts=posts)
         else:
             self.render("landing.html")
 
@@ -248,242 +266,311 @@ class ProfilePage(Handler):
     """Handler for the profile page"""
 
     def get(self):
-        uid = self.read_cookie("user", True)
-        user = User.get_by_id(int(uid))
-        posts = db.GqlQuery(
-            "SELECT * FROM Post WHERE author = '{0}' ORDER BY created_time \
-            DESC".format(user.name)
-        )
-        comments = db.GqlQuery(
-            "SELECT * FROM Comment WHERE author = '{0}' ORDER BY created_time \
-            DESC".format(user.name)
-        )
-        self.render("profile.html", user=user, posts=posts, comments=comments)
+        # Check that user is valid
+        if not self.valid_user():
+            self.set_cookie("user", "", "/", False)
+            self.redirect("/")
+        else:
+            uid = self.read_cookie("user", True)
+            user = User.get_by_id(int(uid))
+            posts = db.GqlQuery(
+                "SELECT * FROM Post WHERE author = '{0}' ORDER BY created_time \
+                DESC".format(user.name)
+            )
+            comments = db.GqlQuery(
+                "SELECT * FROM Comment WHERE author = '{0}' ORDER BY created_time \
+                DESC".format(user.name)
+            )
+            self.render("profile.html", user=user, posts=posts,
+                        comments=comments)
 
 
 class EditPostPage(Handler):
     """Handler for the edit post and new post pages"""
 
     def get(self, pid=None):
-        # If this is a current post, edit the current post
-        if pid:
-            # Check that user created this post
-            uid = self.read_cookie("user", True)
-            post = Post.get_by_id(int(pid))
-            if self.user_post(uid, pid):
-                self.render("edit-post.html", post=post)
-            else:
-                user = User.get_by_id(int(uid))
-                comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
-                    {0}".format(pid))
-                self.render("view-post.html", post=post, user=user,
-                            comments=comments,
-                            error="You cannot edit a post you did not create")
-        # Otherwise create a new post
+        # Check that user is valid
+        if not self.valid_user():
+            self.set_cookie("user", "", "/", False)
+            self.redirect("/")
         else:
-            self.render("edit-post.html")
+            # If this is a current post, edit the current post
+            if pid:
+                # Check that user created this post
+                uid = self.read_cookie("user", True)
+                post = Post.get_by_id(int(pid))
+                if self.user_post(uid, pid):
+                    self.render("edit-post.html", post=post)
+                else:
+                    user = User.get_by_id(int(uid))
+                    comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
+                        {0}".format(pid))
+                    self.render("view-post.html", post=post, user=user,
+                                comments=comments,
+                                error="You cannot edit a post you did not \
+                                create")
+            # Otherwise create a new post
+            else:
+                self.render("edit-post.html")
 
     def post(self, pid=None):
         title = self.request.get("title")
         content = self.request.get("content")
 
-        if pid:
-            # Check that user created this post
-            uid = self.read_cookie("user", True)
-            post = Post.get_by_id(int(pid))
-            if self.user_post(uid, pid):
+        # Check that user is valid
+        if not self.valid_user():
+            self.set_cookie("user", "", "/", False)
+            self.redirect("/")
+        else:
+            if pid:
+                # Check that user created this post
+                uid = self.read_cookie("user", True)
+                post = Post.get_by_id(int(pid))
+                if self.user_post(uid, pid):
+                    # Check to ensure title and content are not blank
+                    if len(title) == 0 or len(content) == 0:
+                        self.render("edit-post.html", post=post,
+                                    error="Missing one or more required \
+                                    fields")
+                    else:
+                        post.title = title
+                        post.content = content
+                        post.put()
+                        self.redirect("/post/{0}".format(pid))
+                else:
+                    user = User.get_by_id(int(uid))
+                    comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
+                             {0}".format(pid))
+                    self.render("view-post.html", post=post, user=user,
+                                comments=comments,
+                                error="You cannot edit a post you did not \
+                                create")
+            else:
                 # Check to ensure title and content are not blank
                 if len(title) == 0 or len(content) == 0:
-                    self.render("edit-post.html", post=post,
+                    self.render("edit-post.html",
                                 error="Missing one or more required fields")
                 else:
-                    post.title = title
-                    post.content = content
-                    post.put()
+                    uid = self.read_cookie("user", True)
+                    user = User.get_by_id(int(uid))
+                    post = Post(title=title, content=content, author=user.name)
+                    post_key = post.put()
+                    pid = post_key.id()
                     self.redirect("/post/{0}".format(pid))
-            else:
-                user = User.get_by_id(int(uid))
-                comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
-                         {0}".format(pid))
-                self.render("view-post.html", post=post, user=user,
-                            comments=comments,
-                            error="You cannot edit a post you did not create")
-        else:
-            # Check to ensure title and content are not blank
-            if len(title) == 0 or len(content) == 0:
-                self.render("edit-post.html",
-                            error="Missing one or more required fields")
-            else:
-                uid = self.read_cookie("user", True)
-                user = User.get_by_id(int(uid))
-                post = Post(title=title, content=content, author=user.name)
-                post_key = post.put()
-                pid = post_key.id()
-                self.redirect("/post/{0}".format(pid))
 
 
 class ViewPostPage(Handler):
     """Handler for the post pages"""
 
     def get(self, pid):
-        post = Post.get_by_id(int(pid))
-        # Check if post exists in case of slow deletion
-        if not post:
+        # Check that user is valid
+        if not self.valid_user():
+            self.set_cookie("user", "", "/", False)
             self.redirect("/")
-        uid = self.read_cookie("user", True)
-        user = User.get_by_id(int(uid))
-        comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
-            {0}".format(pid))
-        self.render("view-post.html", post=post, user=user, comments=comments)
-
-    def post(self, pid):
-        post = Post.get_by_id(int(pid))
-        # Check if this is the user's post
-        own = False
-        uid = self.read_cookie("user", True)
-        user = User.get_by_id(int(uid))
-        comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
-            {0}".format(pid))
-        if self.user_post(uid, pid):
-            own = True
-            self.render("view-post.html", post=post, user=user,
-                        comments=comments,
-                        error="You cannot like your own post")
-        # Check if user has already liked this post
-        liked = False
-        for like in user.liked_posts:
-            if like == int(pid):
-                liked = True
-                self.render("view-post.html", post=post, user=user,
-                            comments=comments,
-                            error="You cannot like the same post twice")
-        if not liked and not own:
-            post.likes += 1
-            post.put()
-            user.liked_posts.append(int(pid))
-            user.put()
+        else:
+            post = Post.get_by_id(int(pid))
+            # Check if post exists in case of slow deletion
+            if not post:
+                self.redirect("/")
+            uid = self.read_cookie("user", True)
+            user = User.get_by_id(int(uid))
+            comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
+                {0}".format(pid))
             self.render("view-post.html", post=post, user=user,
                         comments=comments)
+
+    def post(self, pid):
+        # Check that user is valid
+        if not self.valid_user():
+            self.set_cookie("user", "", "/", False)
+            self.redirect("/")
+        else:
+            post = Post.get_by_id(int(pid))
+            # Check if this is the user's post
+            own = False
+            uid = self.read_cookie("user", True)
+            user = User.get_by_id(int(uid))
+            comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
+                {0}".format(pid))
+            if self.user_post(uid, pid):
+                own = True
+                self.render("view-post.html", post=post, user=user,
+                            comments=comments,
+                            error="You cannot like your own post")
+            # Check if user has already liked this post
+            liked = False
+            for like in user.liked_posts:
+                if like == int(pid):
+                    liked = True
+                    self.render("view-post.html", post=post, user=user,
+                                comments=comments,
+                                error="You cannot like the same post twice")
+            if not liked and not own:
+                post.likes += 1
+                post.put()
+                user.liked_posts.append(int(pid))
+                user.put()
+                self.render("view-post.html", post=post, user=user,
+                            comments=comments)
 
 
 class DeletePostPage(Handler):
     """Handler for deleting a post"""
 
     def get(self, pid):
-        # Check that user created post
-        uid = self.read_cookie("user", True)
-        if self.user_post(uid, pid):
-            post = Post.get_by_id(int(pid))
-            post.delete()
+        # Check that user is valid
+        if not self.valid_user():
+            self.set_cookie("user", "", "/", False)
             self.redirect("/")
         else:
-            user = User.get_by_id(int(uid))
-            post = Post.get_by_id(int(pid))
-            comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
-                {0}".format(pid))
-            self.render("view-post.html", post=post, user=user,
-                        comments=comments,
-                        error="You cannot delete a post you did not create")
+            # Check that user created post
+            uid = self.read_cookie("user", True)
+            if self.user_post(uid, pid):
+                post = Post.get_by_id(int(pid))
+                post.delete()
+                self.redirect("/")
+            else:
+                user = User.get_by_id(int(uid))
+                post = Post.get_by_id(int(pid))
+                comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
+                    {0}".format(pid))
+                self.render("view-post.html", post=post, user=user,
+                            comments=comments,
+                            error="You cannot delete a post you did not \
+                            create")
 
 
 class CreateCommentPage(Handler):
     """Handler for commenting on a post"""
 
     def get(self, pid):
-        post = Post.get_by_id(int(pid))
-        self.render("create-comment.html", post=post)
+        # Check that user is valid
+        if not self.valid_user():
+            self.set_cookie("user", "", "/", False)
+            self.redirect("/")
+        else:
+            post = Post.get_by_id(int(pid))
+            self.render("create-comment.html", post=post)
 
     def post(self, pid):
         content = self.request.get("content")
 
-        post = Post.get_by_id(int(pid))
-        # Check that content is not blank
-        if len(content) == 0:
-            self.render("create-comment.html", post=post,
-                        error="Your comment must include content")
+        # Check that user is valid
+        if not self.valid_user():
+            self.set_cookie("user", "", "/", False)
+            self.redirect("/")
         else:
-            uid = self.read_cookie("user", True)
-            user = User.get_by_id(int(uid))
-            comment = Comment(content=content, author=user.name,
-                              post_id=int(pid))
-            comment.put()
-            comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
-                {0}".format(pid))
-            self.render("view-post.html", post=post, user=user,
-                        comments=comments)
+            post = Post.get_by_id(int(pid))
+            # Check that content is not blank
+            if len(content) == 0:
+                self.render("create-comment.html", post=post,
+                            error="Your comment must include content")
+            else:
+                uid = self.read_cookie("user", True)
+                user = User.get_by_id(int(uid))
+                comment = Comment(content=content, author=user.name,
+                                  post_id=int(pid))
+                comment.put()
+                comments = db.GqlQuery("SELECT * FROM Comment WHERE post_id = \
+                    {0}".format(pid))
+                self.render("view-post.html", post=post, user=user,
+                            comments=comments)
 
 
 class EditCommentPage(Handler):
     """Handler for editing a comment"""
 
     def get(self, pid, cid):
-        post = Post.get_by_id(int(pid))
-        comment = Comment.get_by_id(int(cid))
-        # Check that this comment was created by user
-        uid = self.read_cookie("user", True)
-        if self.user_comment(uid, cid):
-            self.render("edit-comment.html", post=post, comment=comment)
+        # Check that user is valid
+        if not self.valid_user():
+            self.set_cookie("user", "", "/", False)
+            self.redirect("/")
         else:
-            user = User.get_by_id(int(uid))
-            self.render("view-comment.html", post=post, user=user,
-                        comment=comment,
-                        error="You cannot edit a post you did not create")
+            post = Post.get_by_id(int(pid))
+            comment = Comment.get_by_id(int(cid))
+            # Check that this comment was created by user
+            uid = self.read_cookie("user", True)
+            if self.user_comment(uid, cid):
+                self.render("edit-comment.html", post=post, comment=comment)
+            else:
+                user = User.get_by_id(int(uid))
+                self.render("view-comment.html", post=post, user=user,
+                            comment=comment,
+                            error="You cannot edit a post you did not create")
 
     def post(self, pid, cid):
         content = self.request.get("content")
 
-        post = Post.get_by_id(int(pid))
-        comment = Comment.get_by_id(int(cid))
-        # Check that user created this comment
-        uid = self.read_cookie("user", True)
-        user = User.get_by_id(int(uid))
-        if self.user_comment(uid, cid):
-            # Check that content is not blank
-            if len(content) == 0:
-                self.render("edit-comment.html", post=post, comment=comment,
-                            error="Your comment must include content")
-            else:
-                comment.content = content
-                comment.put()
-                self.render("view-comment.html", post=post, user=user,
-                            comment=comment)
+        # Check that user is valid
+        if not self.valid_user():
+            self.set_cookie("user", "", "/", False)
+            self.redirect("/")
         else:
-            self.render("view-comment.html", post=post, user=user,
-                        comment=comment,
-                        error="You cannot edit a post you did not create")
+            post = Post.get_by_id(int(pid))
+            comment = Comment.get_by_id(int(cid))
+            # Check that user created this comment
+            uid = self.read_cookie("user", True)
+            user = User.get_by_id(int(uid))
+            if self.user_comment(uid, cid):
+                # Check that content is not blank
+                if len(content) == 0:
+                    self.render("edit-comment.html", post=post,
+                                comment=comment,
+                                error="Your comment must include content")
+                else:
+                    comment.content = content
+                    comment.put()
+                    self.render("view-comment.html", post=post, user=user,
+                                comment=comment)
+            else:
+                self.render("view-comment.html", post=post, user=user,
+                            comment=comment,
+                            error="You cannot edit a post you did not create")
 
 
 class ViewCommentPage(Handler):
     """Handler for viewing a comment"""
 
     def get(self, pid, cid):
-        comment = Comment.get_by_id(int(cid))
-        # Check if comment exists in case of slow deletion
-        if not comment:
-            self.redirect("/post/{0}".format(pid))
-        post = Post.get_by_id(int(pid))
-        uid = self.read_cookie("user", True)
-        user = User.get_by_id(int(uid))
-        self.render("view-comment.html", post=post, user=user, comment=comment)
+        # Check that user is valid
+        if not self.valid_user():
+            self.set_cookie("user", "", "/", False)
+            self.redirect("/")
+        else:
+            comment = Comment.get_by_id(int(cid))
+            # Check if comment exists in case of slow deletion
+            if not comment:
+                self.redirect("/post/{0}".format(pid))
+            post = Post.get_by_id(int(pid))
+            uid = self.read_cookie("user", True)
+            user = User.get_by_id(int(uid))
+            self.render("view-comment.html", post=post, user=user,
+                        comment=comment)
 
 
 class DeleteCommentPage(Handler):
     """Handler for deleting a comment"""
 
     def get(self, pid, cid):
-        # Check that user created comment
-        uid = self.read_cookie("user", True)
-        if self.user_comment(uid, cid):
-            comment = Comment.get_by_id(int(cid))
-            comment.delete()
-            self.redirect("/post/{0}".format(pid))
+        # Check that user is valid
+        if not self.valid_user():
+            self.set_cookie("user", "", "/", False)
+            self.redirect("/")
         else:
-            user = User.get_by_id(int(uid))
-            post = Post.get_by_id(int(pid))
-            comment = Comment.get_by_id(int(cid))
-            self.render("view-comment.html", post=post, user=user,
-                        comment=comment,
-                        error="You cannot delete a comment you did not create")
+            # Check that user created comment
+            uid = self.read_cookie("user", True)
+            if self.user_comment(uid, cid):
+                comment = Comment.get_by_id(int(cid))
+                comment.delete()
+                self.redirect("/post/{0}".format(pid))
+            else:
+                user = User.get_by_id(int(uid))
+                post = Post.get_by_id(int(pid))
+                comment = Comment.get_by_id(int(cid))
+                self.render("view-comment.html", post=post, user=user,
+                            comment=comment,
+                            error="You cannot delete a comment you did not \
+                            create")
 
 app = webapp2.WSGIApplication([
     ("/", MainPage),
